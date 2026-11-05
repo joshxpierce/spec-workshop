@@ -1,0 +1,14 @@
+{
+  "variant": "rules",
+  "agent": "claude",
+  "agentVersion": "2.1.318 (Claude Code)",
+  "model": "claude-opus-5-5",
+  "firstMessage": "Read specs/allowlist.md and carry it out.",
+  "recordedAt": "2026-11-05T11:12:23.682Z",
+  "wallClockSeconds": 80,
+  "exitCode": 0,
+  "turns": 9,
+  "costUsd": 0.5292936,
+  "verifyExitCode": 0,
+  "workspace": "~/spec-workshop-live/record-rules"
+}

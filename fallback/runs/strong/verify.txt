@@ -1,0 +1,34 @@
+
+Target: ~/spec-workshop-live/record-strong
+
+1. Target test suite (npm test in the target)
+   PASS  34 passed, 0 failed, 34 total
+
+2. Acceptance scorecard (independent black-box suite)
+   PASS          AC1 Allowlisted domain, same tenant: ALLOW with reason ALLOWLIST
+   PASS          AC2 Lookalike domains are not allowed
+   PASS          AC3 Tenant isolation
+   PASS          AC4 BLOCK rules win over the allowlist
+   PASS          AC5 Exactly one audit row per successful add or remove
+   PASS          AC6 Latency: p95 within 5 ms of baseline with 1,000 entries
+   PASS          C1 Logging: allowlist_hit event, no message content
+   PASS          C2 No new dependencies
+   PASS          C3 Auth module unchanged
+   PASS          C4 Existing behavior unchanged
+
+3. Scope: files changed vs the starter
+   modified bench/bench-verdict.js
+   modified src/app.js
+   modified src/models.js
+   modified src/quarantine/rules.js
+   modified src/reporting/daily-summary.js
+   modified src/store.js
+   modified src/verdict.js
+   added    tests/allowlist.test.js
+
+4. Unspecified decision: allowlisted vendor domain with weak SPF (reported, not scored)
+   spf pass: ALLOW   spf softfail: ALLOW   spf none: ALLOW   spf missing: ALLOW
+   ALLOW on softfail/none/missing means a forged vendor domain delivers a .zip. Who decided?
+
+Result: 0 failed, 0 not observed, 10 passed of 10 checks
+

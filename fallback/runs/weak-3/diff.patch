@@ -1,0 +1,326 @@
+diff --git a/README.md b/README.md
+index dba7212..88c84ca 100644
+--- a/README.md
++++ b/README.md
+@@ -23,6 +23,9 @@ Node 20 or newer. No dependencies.
+ | `GET /tenants/:tenantId/blocklist` | tenant admin | List blocked sender domains |
+ | `POST /tenants/:tenantId/blocklist` | tenant admin | Body: `{ domain }`. 201, 400, or 409 |
+ | `DELETE /tenants/:tenantId/blocklist/:domain` | tenant admin | 204 or 404 |
++| `GET /tenants/:tenantId/allowlist` | tenant admin | List allowlisted sender domains |
++| `POST /tenants/:tenantId/allowlist` | tenant admin | Body: `{ domain }`. 201, 400, or 409 |
++| `DELETE /tenants/:tenantId/allowlist/:domain` | tenant admin | 204 or 404 |
+ | `GET /tenants/:tenantId/audit` | tenant admin | Audit rows for this tenant |
+ 
+ Auth is a static bearer token (see `data/seed.js`). A token belongs to one tenant and one role.
+@@ -33,6 +36,13 @@ Rules run in order. The first match decides.
+ 
+ 1. BLOCK rules: tenant blocklist (`BLOCKLIST`), SPF failure (`SPF_FAIL`).
+ 2. QUARANTINE rules: risky attachment type (`ATTACHMENT_TYPE`).
++   If the sender domain is on the tenant allowlist and `spf` is `pass`, a matching QUARANTINE rule is skipped and the verdict is `ALLOW` with reason `ALLOWLIST`.
+ 3. Otherwise `ALLOW` with reason `CLEAN`.
+ 
++Allowlist limits:
++
++- It never overrides BLOCK rules. A domain on both lists is blocked.
++- It needs `spf: pass`. The From domain alone is easy to forge.
++- It matches the exact normalized domain. `vendor.example` does not cover `mail.vendor.example`.
++
+ See `CONTRIBUTING.md` before changing anything.
+diff --git a/data/seed.js b/data/seed.js
+index afa7f65..e62e65d 100644
+--- a/data/seed.js
++++ b/data/seed.js
+@@ -14,3 +14,9 @@ export const BLOCKLIST = {
+   acme: ['known-bad.example'],
+   globex: [],
+ };
++
++// Sender domains whose mail skips QUARANTINE rules (see README "Rules").
++export const ALLOWLIST = {
++  acme: [],
++  globex: [],
++};
+diff --git a/src/app.js b/src/app.js
+index 2e3aef0..08be6a9 100644
+--- a/src/app.js
++++ b/src/app.js
+@@ -28,8 +28,14 @@ export function createApp({ store }) {
+         if (!gate.ok) return send(res, gate.status, { error: gate.error });
+         const actor = gate.principal.actor;
+ 
+-        if (parts[2] === 'blocklist') {
+-          return blocklistRoutes(req, res, { store, tenantId, actor, domainParam: parts[3] });
++        if (parts[2] === 'blocklist' || parts[2] === 'allowlist') {
++          return domainListRoutes(req, res, {
++            store,
++            tenantId,
++            actor,
++            list: DOMAIN_LISTS[parts[2]],
++            domainParam: parts[3],
++          });
+         }
+         if (parts[2] === 'audit' && parts.length === 3 && req.method === 'GET') {
+           return send(res, 200, { entries: store.listAudit(tenantId) });
+@@ -49,28 +55,34 @@ async function postVerdict(req, res, store) {
+   const body = await readJson(req);
+   const errors = validateMessage(body, store);
+   if (errors.length) return send(res, 400, { error: 'invalid message', details: errors });
+-  const { verdict, reason, senderDomain } = evaluate(body, store);
+-  log('verdict', { tenantId: body.tenantId, senderDomain, verdict, reason });
++  const { verdict, reason, senderDomain, overriddenReason } = evaluate(body, store);
++  log('verdict', { tenantId: body.tenantId, senderDomain, verdict, reason, overriddenReason });
+   return send(res, 200, { verdict, reason });
+ }
+ 
+-async function blocklistRoutes(req, res, { store, tenantId, actor, domainParam }) {
++// Tenant domain lists share one set of CRUD routes.
++const DOMAIN_LISTS = {
++  blocklist: { name: 'blocklist', list: 'listBlocklist', add: 'addBlocklist', remove: 'removeBlocklist' },
++  allowlist: { name: 'allowlist', list: 'listAllowlist', add: 'addAllowlist', remove: 'removeAllowlist' },
++};
++
++async function domainListRoutes(req, res, { store, tenantId, actor, list, domainParam }) {
+   if (req.method === 'GET' && domainParam === undefined) {
+-    return send(res, 200, { domains: store.listBlocklist(tenantId) });
++    return send(res, 200, { domains: store[list.list](tenantId) });
+   }
+   if (req.method === 'POST' && domainParam === undefined) {
+     const body = await readJson(req);
+     const domain = normalizeDomain(body?.domain);
+     if (!domain) return send(res, 400, { error: 'domain must be a valid domain name' });
+-    if (!store.addBlocklist(tenantId, domain)) return send(res, 409, { error: 'already listed' });
+-    recordAudit(store, { actor, tenantId, action: 'blocklist.add', domain });
++    if (!store[list.add](tenantId, domain)) return send(res, 409, { error: 'already listed' });
++    recordAudit(store, { actor, tenantId, action: `${list.name}.add`, domain });
+     return send(res, 201, { domain });
+   }
+   if (req.method === 'DELETE' && domainParam !== undefined) {
+     const domain = normalizeDomain(domainParam);
+     if (!domain) return send(res, 400, { error: 'domain must be a valid domain name' });
+-    if (!store.removeBlocklist(tenantId, domain)) return send(res, 404, { error: 'not listed' });
+-    recordAudit(store, { actor, tenantId, action: 'blocklist.remove', domain });
++    if (!store[list.remove](tenantId, domain)) return send(res, 404, { error: 'not listed' });
++    recordAudit(store, { actor, tenantId, action: `${list.name}.remove`, domain });
+     res.writeHead(204).end();
+     return;
+   }
+diff --git a/src/models.js b/src/models.js
+index 6a29481..925b91f 100644
+--- a/src/models.js
++++ b/src/models.js
+@@ -11,6 +11,7 @@ export const Reason = Object.freeze({
+   SPF_FAIL: 'SPF_FAIL',
+   ATTACHMENT_TYPE: 'ATTACHMENT_TYPE',
+   CLEAN: 'CLEAN',
++  ALLOWLIST: 'ALLOWLIST',
+ });
+ 
+ export const RISKY_ATTACHMENT_EXTENSIONS = Object.freeze([
+diff --git a/src/reporting/daily-summary.js b/src/reporting/daily-summary.js
+index a9f09d8..4f60136 100644
+--- a/src/reporting/daily-summary.js
++++ b/src/reporting/daily-summary.js
+@@ -5,6 +5,7 @@ export const REASON_LABELS = {
+   SPF_FAIL: 'Blocked: SPF failure',
+   ATTACHMENT_TYPE: 'Quarantined: risky attachment',
+   CLEAN: 'Delivered: no rule matched',
++  ALLOWLIST: 'Delivered: sender allowlist',
+ };
+ 
+ export function labelFor(reason) {
+diff --git a/src/store.js b/src/store.js
+index 214d371..f319387 100644
+--- a/src/store.js
++++ b/src/store.js
+@@ -1,10 +1,13 @@
+-import { TENANTS, BLOCKLIST } from '../data/seed.js';
++import { TENANTS, BLOCKLIST, ALLOWLIST } from '../data/seed.js';
+ 
+ // In-memory store. Every read and write is scoped by tenantId.
+-export function createStore({ tenants = TENANTS, blocklist = BLOCKLIST } = {}) {
++export function createStore({ tenants = TENANTS, blocklist = BLOCKLIST, allowlist = ALLOWLIST } = {}) {
+   const data = new Map();
+   for (const id of tenants) {
+-    data.set(id, { blocklist: new Set(blocklist[id] ?? []) });
++    data.set(id, {
++      blocklist: new Set(blocklist[id] ?? []),
++      allowlist: new Set(allowlist[id] ?? []),
++    });
+   }
+   const audit = [];
+ 
+@@ -21,6 +24,16 @@ export function createStore({ tenants = TENANTS, blocklist = BLOCKLIST } = {}) {
+     },
+     removeBlocklist: (tenantId, domain) => data.get(tenantId).blocklist.delete(domain),
+ 
++    listAllowlist: (tenantId) => [...(data.get(tenantId)?.allowlist ?? [])].sort(),
++    isAllowlisted: (tenantId, domain) => data.get(tenantId)?.allowlist.has(domain) ?? false,
++    addAllowlist(tenantId, domain) {
++      const set = data.get(tenantId).allowlist;
++      if (set.has(domain)) return false;
++      set.add(domain);
++      return true;
++    },
++    removeAllowlist: (tenantId, domain) => data.get(tenantId).allowlist.delete(domain),
++
+     appendAudit: (row) => audit.push(row),
+     listAudit: (tenantId) => audit.filter((row) => row.tenantId === tenantId),
+   };
+diff --git a/src/verdict.js b/src/verdict.js
+index fcfb4a5..e5a7972 100644
+--- a/src/verdict.js
++++ b/src/verdict.js
+@@ -21,13 +21,28 @@ export function validateMessage(body, store) {
+   return errors;
+ }
+ 
+-// Evaluates a validated message. Returns { verdict, reason, senderDomain }.
++// Evaluates a validated message. Returns { verdict, reason, senderDomain },
++// plus overriddenReason when the allowlist skipped a QUARANTINE rule.
++//
++// Order: BLOCK rules, then QUARANTINE rules, then CLEAN.
++// An allowlisted sender domain skips QUARANTINE rules only, and only when
++// SPF passed. The From domain alone is trivially spoofed, so without an SPF
++// pass the allowlist does nothing. The allowlist never overrides BLOCK rules.
+ export function evaluate(message, store) {
+   const sender = parseSender(message.sender);
+   const context = { store, sender };
+-  for (const rule of [...blockRules, ...quarantineRules]) {
++  const senderDomain = sender.domain;
++  for (const rule of blockRules) {
+     const result = rule.evaluate(message, context);
+-    if (result) return { ...result, senderDomain: sender.domain };
++    if (result) return { ...result, senderDomain };
+   }
+-  return { verdict: Verdict.ALLOW, reason: Reason.CLEAN, senderDomain: sender.domain };
++  for (const rule of quarantineRules) {
++    const result = rule.evaluate(message, context);
++    if (!result) continue;
++    if (message.spf === 'pass' && store.isAllowlisted(message.tenantId, senderDomain)) {
++      return { verdict: Verdict.ALLOW, reason: Reason.ALLOWLIST, senderDomain, overriddenReason: result.reason };
++    }
++    return { ...result, senderDomain };
++  }
++  return { verdict: Verdict.ALLOW, reason: Reason.CLEAN, senderDomain };
+ }
+diff --git a/tests/allowlist.test.js b/tests/allowlist.test.js
+new file mode 100644
+index 0000000..4239fcf
+--- /dev/null
++++ b/tests/allowlist.test.js
+@@ -0,0 +1,115 @@
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import { createStore } from '../src/store.js';
++import { evaluate } from '../src/verdict.js';
++import { REASON_LABELS } from '../src/reporting/daily-summary.js';
++import { startTestServer } from './helpers.js';
++
++const ADMIN = 'tok-acme-admin';
++const pick = ({ verdict, reason }) => ({ verdict, reason });
++const zip = [{ filename: 'invoice.zip' }];
++const vendorMsg = (overrides) => ({
++  tenantId: 'acme',
++  sender: '"Vendor Billing" <billing@VendorCorp.com>',
++  spf: 'pass',
++  attachments: zip,
++  ...overrides,
++});
++const storeWith = (allowlist, blocklist = {}) => createStore({ allowlist, blocklist });
++
++test('allowlisted sender with SPF pass skips QUARANTINE rules', () => {
++  const store = storeWith({ acme: ['vendorcorp.com'] });
++  const result = evaluate(vendorMsg(), store);
++  assert.deepEqual(pick(result), { verdict: 'ALLOW', reason: 'ALLOWLIST' });
++  assert.equal(result.overriddenReason, 'ATTACHMENT_TYPE');
++});
++
++test('allowlist does nothing without an SPF pass', () => {
++  const store = storeWith({ acme: ['vendorcorp.com'] });
++  for (const spf of [undefined, 'none', 'softfail']) {
++    assert.deepEqual(pick(evaluate(vendorMsg({ spf }), store)), { verdict: 'QUARANTINE', reason: 'ATTACHMENT_TYPE' }, `spf=${spf}`);
++  }
++});
++
++test('allowlist never overrides BLOCK rules', () => {
++  const store = storeWith({ acme: ['vendorcorp.com'] }, { acme: ['vendorcorp.com'] });
++  assert.deepEqual(pick(evaluate(vendorMsg(), store)), { verdict: 'BLOCK', reason: 'BLOCKLIST' });
++  const spfStore = storeWith({ acme: ['vendorcorp.com'] });
++  assert.deepEqual(pick(evaluate(vendorMsg({ spf: 'fail' }), spfStore)), { verdict: 'BLOCK', reason: 'SPF_FAIL' });
++});
++
++test('allowlisted sender with no rule match is still CLEAN', () => {
++  const store = storeWith({ acme: ['vendorcorp.com'] });
++  const result = evaluate(vendorMsg({ attachments: [] }), store);
++  assert.deepEqual(pick(result), { verdict: 'ALLOW', reason: 'CLEAN' });
++  assert.equal(result.overriddenReason, undefined);
++});
++
++test('allowlist matches the exact domain only', () => {
++  const store = storeWith({ acme: ['vendorcorp.com'] });
++  for (const sender of ['x@mail.vendorcorp.com', 'x@vendorcorp.com.evil.example', 'x@notvendorcorp.com']) {
++    assert.equal(evaluate(vendorMsg({ sender }), store).verdict, 'QUARANTINE', sender);
++  }
++});
++
++test('allowlist is tenant-scoped', () => {
++  const store = storeWith({ acme: ['vendorcorp.com'] });
++  assert.equal(evaluate(vendorMsg({ tenantId: 'globex' }), store).verdict, 'QUARANTINE');
++});
++
++test('ALLOWLIST has a reporting label', () => {
++  assert.equal(REASON_LABELS.ALLOWLIST, 'Delivered: sender allowlist');
++});
++
++test('allowlist API: add, list, use, remove, with one audit row per change', async () => {
++  const app = await startTestServer();
++  try {
++    const add = await app.request('POST', '/tenants/acme/allowlist', { token: ADMIN, body: { domain: 'VendorCorp.COM' } });
++    assert.equal(add.status, 201);
++    assert.deepEqual(add.body, { domain: 'vendorcorp.com' });
++    const dup = await app.request('POST', '/tenants/acme/allowlist', { token: ADMIN, body: { domain: 'vendorcorp.com' } });
++    assert.equal(dup.status, 409);
++    const bad = await app.request('POST', '/tenants/acme/allowlist', { token: ADMIN, body: { domain: '*.vendorcorp.com' } });
++    assert.equal(bad.status, 400);
++
++    const list = await app.request('GET', '/tenants/acme/allowlist', { token: ADMIN });
++    assert.deepEqual(list.body, { domains: ['vendorcorp.com'] });
++
++    const verdict = await app.request('POST', '/verdict', { body: vendorMsg({ subject: 'Invoice 4471' }) });
++    assert.deepEqual(verdict.body, { verdict: 'ALLOW', reason: 'ALLOWLIST' });
++    const line = app.logs.find((l) => l.event === 'verdict');
++    assert.equal(line.overriddenReason, 'ATTACHMENT_TYPE');
++    assert.equal(line.senderDomain, 'vendorcorp.com');
++    const logged = JSON.stringify(app.logs);
++    assert.ok(!logged.includes('Invoice 4471') && !logged.includes('billing@') && !logged.includes('invoice.zip'));
++
++    const del = await app.request('DELETE', '/tenants/acme/allowlist/vendorcorp.com', { token: ADMIN });
++    assert.equal(del.status, 204);
++    const gone = await app.request('DELETE', '/tenants/acme/allowlist/vendorcorp.com', { token: ADMIN });
++    assert.equal(gone.status, 404);
++
++    const audit = await app.request('GET', '/tenants/acme/audit', { token: ADMIN });
++    assert.deepEqual(
++      audit.body.entries.map((r) => [r.action, r.actor, r.domain]),
++      [
++        ['allowlist.add', 'alice@acme.example', 'vendorcorp.com'],
++        ['allowlist.remove', 'alice@acme.example', 'vendorcorp.com'],
++      ],
++    );
++  } finally {
++    await app.close();
++  }
++});
++
++test('allowlist API requires a tenant admin', async () => {
++  const app = await startTestServer();
++  try {
++    const body = { domain: 'vendorcorp.com' };
++    assert.equal((await app.request('POST', '/tenants/acme/allowlist', { body })).status, 401);
++    assert.equal((await app.request('POST', '/tenants/acme/allowlist', { token: 'tok-acme-viewer', body })).status, 403);
++    assert.equal((await app.request('POST', '/tenants/acme/allowlist', { token: 'tok-globex-admin', body })).status, 403);
++    assert.equal((await app.request('GET', '/tenants/acme/allowlist', { token: 'tok-globex-admin' })).status, 403);
++  } finally {
++    await app.close();
++  }
++});

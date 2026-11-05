@@ -1,0 +1,1 @@
+Customers keep complaining that mail from their vendors gets quarantined. Add a way to allowlist senders.

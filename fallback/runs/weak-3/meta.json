@@ -1,0 +1,14 @@
+{
+  "variant": "weak",
+  "agent": "claude",
+  "agentVersion": "2.1.318 (Claude Code)",
+  "model": "claude-opus-5-5",
+  "firstMessage": "Customers keep complaining that mail from their vendors gets quarantined. Add a way to allowlist senders.",
+  "recordedAt": "2026-11-05T11:14:33.441Z",
+  "wallClockSeconds": 75,
+  "exitCode": 0,
+  "turns": 8,
+  "costUsd": 0.46912679999999995,
+  "verifyExitCode": 1,
+  "workspace": "~/spec-workshop-live/record-weak-3"
+}

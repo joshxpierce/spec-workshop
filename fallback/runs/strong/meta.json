@@ -1,0 +1,14 @@
+{
+  "variant": "strong",
+  "agent": "claude",
+  "agentVersion": "2.1.318 (Claude Code)",
+  "model": "claude-opus-5-5",
+  "firstMessage": "Read specs/allowlist.md and carry it out.",
+  "recordedAt": "2026-11-05T11:12:19.917Z",
+  "wallClockSeconds": 76,
+  "exitCode": 0,
+  "turns": 7,
+  "costUsd": 0.49751860000000003,
+  "verifyExitCode": 0,
+  "workspace": "~/spec-workshop-live/record-strong"
+}
