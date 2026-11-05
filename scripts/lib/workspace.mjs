@@ -38,7 +38,8 @@ export function promptFor(variant) {
 }
 
 const git = (cwd, ...args) =>
-  execFileSync('git', ['-c', 'user.name=Workshop', '-c', 'user.email=workshop@example.invalid', ...args], {
+  // Throwaway local commits: fixed identity, never signed (a global commit.gpgsign would fail without a key).
+  execFileSync('git', ['-c', 'user.name=Workshop', '-c', 'user.email=workshop@example.invalid', '-c', 'commit.gpgsign=false', ...args], {
     cwd,
     stdio: 'pipe',
   }).toString();
