@@ -1,90 +1,124 @@
 # Spec workshop kit
 
-Live example for the workshop "AI-Native Transformation: Software Development in Practice": one vague ticket, one agent-ready spec, the same coding agent, and an independent test suite that scores the result.
+Learn to write specs that coding agents can carry out, and to build the habit into your repos so each spec gets shorter over time.
 
-The sandbox is `triage-service`, a small fictional message-triage API (Node 20+, no dependencies). The task: let a tenant admin allowlist a vendor's sender domain without opening a phishing bypass.
+## Summary
 
-Start with **[pack/](pack/README.md)**: spec template, rubric, and standing-rules templates. Then run the commands below.
+Give a coding agent a vague ticket and it fills the gaps with its own guesses. Give it a spec and it builds what you meant. This repo lets you see that difference, measure it, and practice closing it.
 
-## Layout
+It contains:
+
+- **A small practice service.** `starter/` is a fictional email-triage API (Node 20+, no dependencies) that agents are asked to change.
+- **The same request written two ways.** [`prompts/weak.txt`](prompts/weak.txt) is a one-sentence ticket. [`prompts/strong.md`](prompts/strong.md) is a nine-element spec for the same work.
+- **An independent scorecard.** `node scripts/verify.mjs <folder>` tests the agent's result from the outside and reports which files it touched.
+- **Real recorded agent runs.** [`fallback/runs/`](fallback/runs/README.md) shows what an agent did with each prompt and how it scored. The weak ticket scored 9 of 10 in 3 of 3 runs; the strong spec scored 10 of 10.
+- **Templates for your own work.** [`pack/`](pack/README.md) has the spec template, a scoring rubric, practice tickets, and `AGENTS.md` / `CLAUDE.md` templates.
+
+## Getting started
+
+Follow **[GUIDE.md](GUIDE.md)**: eight short steps, about 45 minutes, from setup to writing, running, and scoring your own spec. Each step says what you should see.
+
+The quickest way in is to let your coding agent guide you. Clone the repo, open your agent in the folder, and paste:
+
+> Read README.md and GUIDE.md. Walk me through GUIDE.md one step at a time. Run the commands for me, explain what I should see, and wait for me before moving to the next step.
+
+To do it by hand:
+
+1. `git clone https://github.com/joshxpierce/spec-workshop.git`
+2. `cd spec-workshop`
+3. `node scripts/reset-demo.mjs`. You should see "clean starter state" three times.
+4. `node scripts/verify.mjs solution`. The last line should read `10 passed of 10 checks`.
+5. Open [GUIDE.md](GUIDE.md) at step 1.
+
+## Diving deeper: from writing specs to repos that carry them
+
+A good spec repeats things that are true for every task: where code lives, house rules, security limits, when to stop and ask. Writing those into every spec is slow, and people forget. The next level is to write them once, in the repo, where every agent reads them.
+
+**The loop**
+
+1. Write a spec and run it.
+2. Diagnose each miss: did the spec say it? If not, add the line.
+3. Ask of each added line: is it true for every task in this repo? If yes, move it into `AGENTS.md`.
+4. The next spec is shorter, and every teammate's agent inherits the fix.
+
+**What goes where**
+
+| Put it in | When it is | Examples |
+|---|---|---|
+| `AGENTS.md` | True for every task | Context map, commands, conventions, security constraints, stop-and-ask rules, how to report |
+| The spec | True for this task only | Outcome, scope, interface, acceptance criteria |
+| Tests | Checkable by a machine | Acceptance criteria turned into tests the agent did not write |
+
+**See it in this repo.** [`standing-rules/AGENTS.md`](standing-rules/AGENTS.md) holds the sandbox's standing rules. With them in place, the allowlist spec shrinks from 582 words ([`prompts/strong.md`](prompts/strong.md)) to 242 ([`prompts/strong-with-rules.md`](prompts/strong-with-rules.md)), and the recorded run still scored 10 of 10. Try it with `node scripts/reset-demo.mjs rules`.
+
+**Do it in your own repo**
+
+1. Copy [`pack/AGENTS.template.md`](pack/AGENTS.template.md) to your repo root as `AGENTS.md`. Fill in the context map, commands, constraints, and stop-and-ask rules.
+2. Copy [`pack/CLAUDE.template.md`](pack/CLAUDE.template.md) as `CLAUDE.md`. It is one line, `@AGENTS.md`, so Claude Code reads the same rules as Codex, Cursor, and other agents.
+3. Add a `specs/` folder. Commit each spec with the change it produced, and review the spec in the pull request alongside the code.
+4. Turn acceptance criteria into tests the agent did not write. [`acceptance/`](acceptance/) is a model: it tests over HTTP and never imports the code it checks.
+5. After each run, review the "the spec did not say X" lines as a team. Rules true for every task go into `AGENTS.md` through a pull request, like code.
+6. Keep `AGENTS.md` short and current. Delete rules that no longer apply; stale rules mislead agents.
+
+## FAQ
+
+**Where do I write my spec, and will my agent see it?**
+In a practice folder, for example `~/spec-workshop-live/weak/specs/my-spec.md`. You start your agent in that same folder, so it sees the spec. GUIDE.md step 4 has the commands.
+
+**Why are the practice folders outside the repo?**
+If they were inside, the agent could read `solution/` (the answer key), and Claude Code would load this repo's own `CLAUDE.md`. Both would spoil the experiment. Set `SPEC_WORKSHOP_LIVE` to use a different location.
+
+**I don't know what to write for "who is affected" or "what is wrong".**
+Pick a ticket from [`pack/practice-tickets.md`](pack/practice-tickets.md). Each one answers those questions and lists the files to read. On real work, if you cannot answer them, ask whoever filed the ticket. The agent cannot answer them either.
+
+**I don't use Claude Code.**
+Any coding agent that can read files and run commands works (Codex, Cursor, and others). Open it in the practice folder and send the same first message. The scorecard does not care which agent made the change.
+
+**I don't have a coding agent at all.**
+Read the recorded runs in [`fallback/runs/`](fallback/runs/README.md) and work through the guide's writing and scoring steps. You can still write a spec and score it against the rubric by hand.
+
+**What does NOT OBSERVED mean on the scorecard?**
+The folder has no `POST /tenants/:tenantId/allowlist`, so the suite cannot test the feature. It counts as not met. You will see it on the starter, and after any spec that is not the allowlist ticket.
+
+**Why does section 4 of the scorecard say `ALLOW` for SPF softfail?**
+Because [`prompts/strong.md`](prompts/strong.md) does not say what to do when an allowlisted domain fails a weak SPF check. The agent followed the spec, so a forged vendor domain gets through. It is a spec defect, left in on purpose as a diagnosis exercise. The fix is one line: "The allowlist applies only when `spf` is `pass`; otherwise the normal rules apply."
+
+**I ran `reset-demo.mjs` and my spec is gone.**
+Reset deletes and rebuilds the practice folder. Keep a copy of your spec outside `~/spec-workshop-live/`.
+
+**I ran `record-run.mjs` and now `git status` shows changes in `fallback/runs/`.**
+Recording replaces that run's files in your copy. Keep yours, or restore the original with `git checkout fallback/runs/<name>`.
+
+**Does running an agent cost money?**
+It uses your agent's normal usage or billing. Each recorded run here cost about $0.45 to $0.55.
+
+**Do the commands work on Windows?**
+They are written for macOS and Linux shells and have not been tested on Windows. Use WSL or Git Bash.
+
+**Which Node version?**
+20 or newer. Check with `node --version`.
+
+## Reference
 
 | Path | What it is |
 |---|---|
-| `starter/` | The service before the feature. 24 passing tests. This is what the agent starts from |
-| `solution/` | Hand-written reference implementation. 32 tests. Used to prove the acceptance suite and as the last-resort fallback |
-| `prompts/weak.txt` | The ticket as customers wrote it |
-| `prompts/strong.md` | The nine-element spec the agent runs (copied into the live folder as `specs/allowlist.md`) |
-| `prompts/strong-with-rules.md` | The same task as a short spec, for a repo that has standing rules |
-| `standing-rules/` | `AGENTS.md` and a one-line `CLAUDE.md` for the sandbox: rules every task inherits |
-| `acceptance/` | Independent black-box acceptance suite. Starts the target server and tests over HTTP |
-| `scripts/verify.mjs` | Scores any target folder: its own tests, the acceptance scorecard, and a scope report |
-| `scripts/reset-demo.mjs` | Rebuilds the live folders, and switches to a fallback |
-| `scripts/record-run.mjs` | Records a real headless agent run as fallback evidence |
-| `fallback/runs/` | Recorded runs from the live session: transcript, diff, scorecard, metadata |
-| `pack/` | Spec template, rubric, `AGENTS.md` and `CLAUDE.md` templates |
+| `starter/` | The service before the feature. 24 passing tests. Agents start here |
+| `solution/` | Hand-written reference implementation of the allowlist. 32 tests |
+| `prompts/` | The weak ticket, the strong spec, and the short spec for a repo with standing rules |
+| `standing-rules/` | `AGENTS.md` and a one-line `CLAUDE.md` for the sandbox |
+| `acceptance/` | Independent black-box acceptance suite, run over HTTP |
+| `scripts/verify.mjs` | Scorecard for any folder: its own tests, acceptance checks, files touched, and the SPF probe |
+| `scripts/reset-demo.mjs` | Rebuilds `~/spec-workshop-live/{weak,strong,rules}`. `--fallback recorded` or `--fallback solution` applies a finished result |
+| `scripts/record-run.mjs` | Records a headless Claude Code run into `fallback/runs/` |
+| `fallback/runs/` | Recorded runs: transcript, diff, scorecard, metadata |
+| `pack/` | Spec template, rubric, practice tickets, `AGENTS.md` and `CLAUDE.md` templates |
+| `GUIDE.md` | The step-by-step guide |
 
-## Commands
+`reset-demo.mjs` also writes `spec-workshop.code-workspace`. Open it in VS Code for one-click tasks to reset, verify, and start an agent in each practice folder.
 
-Run from this folder. Node 20 or newer.
+**What the scorecard checks:** AC1 to AC6 are the spec's six acceptance criteria. C1 checks the `allowlist_hit` log line and that no subject, sender address local part, or attachment name is logged. C2 checks for no dependencies. C3 checks that `src/auth.js` is unchanged. C4 runs the starter's original 24 tests against the changed code.
 
-```sh
-node scripts/reset-demo.mjs                        # rebuild ~/spec-workshop-live/{weak,strong,rules}
-node scripts/verify.mjs solution                   # expect 10 of 10 checks passed
-node scripts/verify.mjs starter                    # expect 24 tests pass, feature checks NOT OBSERVED
-node scripts/verify.mjs ~/spec-workshop-live/strong
-node scripts/reset-demo.mjs strong --fallback recorded
-node scripts/reset-demo.mjs strong --fallback solution
-node scripts/record-run.mjs strong                 # re-record a fallback run (about 1 to 2 minutes)
-```
-
-`reset-demo.mjs` also writes `spec-workshop.code-workspace`, a VS Code workspace with the kit and the three live folders, and one-click tasks for every command above.
-
-## Write and run your own spec
-
-Write the spec in a practice folder, not in this repo, so the agent cannot see `solution/`. The `weak` practice folder is the plain starter service.
-
-1. From this folder, copy the template into the practice folder:
-   ```sh
-   mkdir -p ~/spec-workshop-live/weak/specs && cp pack/spec-template.md ~/spec-workshop-live/weak/specs/my-spec.md
-   ```
-2. Pick a task. If you do not have one, take a ticket from [`pack/practice-tickets.md`](pack/practice-tickets.md): each one already answers who is affected, what is wrong, and which files to read.
-3. Fill in the nine sections of `~/spec-workshop-live/weak/specs/my-spec.md`. [`prompts/strong.md`](prompts/strong.md) is a finished example.
-4. Start your agent in the practice folder. For Claude Code:
-   ```sh
-   cd ~/spec-workshop-live/weak && claude --permission-mode plan
-   ```
-   Codex or Cursor work too: open the same folder.
-5. Send this first message: `Read specs/my-spec.md and carry it out.`
-6. Read the agent's plan before it edits anything (checkpoint one).
-7. Score the result from this folder:
-   ```sh
-   node scripts/verify.mjs ~/spec-workshop-live/weak
-   ```
-   For an allowlist spec you get the full scorecard. For any other feature, read section 1 (existing tests still pass) and section 3 (files touched), then score it with [`pack/rubric.md`](pack/rubric.md).
-8. Start over with `node scripts/reset-demo.mjs weak`. This deletes the folder, including your spec, so copy the spec somewhere else first.
-
-## Why the live folders are outside this repo
-
-Claude Code loads `CLAUDE.md` from every parent folder. A live folder inside this repo would inherit this repo's context, and the agent could open `../solution`. The live folders are in `~/spec-workshop-live/` (override with `SPEC_WORKSHOP_LIVE`). The agent tasks launch Claude Code with `--setting-sources project,local`, so the presenter's personal `CLAUDE.md`, plugins, and hooks do not load either.
-
-## What the scorecard checks
-
-| Check | How |
-|---|---|
-| AC1 to AC6 | The six acceptance criteria on deck slide 19, over HTTP |
-| C1 | `allowlist_hit` log line exists; no subject, local part, or attachment name in any log line |
-| C2 | No dependencies declared, no `node_modules` |
-| C3 | `src/auth.js` byte-identical to the starter |
-| C4 | The starter's original 24 tests, copied in fresh, pass against the changed code |
-| Scope | Every file added, modified, or deleted vs the starter, flagged if outside the spec's context list |
-
-**NOT OBSERVED** means the target has no `POST /tenants/:tenantId/allowlist`, so the suite cannot drive that check. It counts as not met.
-
-## Honesty rules
-
-- Recorded runs in `fallback/runs/` are real, unedited headless runs. In this copy the recorder's home folder is shown as `~` and the raw event streams are left out. `meta.json` records the agent, version, model, time, and cost.
-- `solution/` is hand-written. Never present it as agent output.
-- One recorded run is one sample. Agents vary run to run.
+**Honesty rules:** recorded runs are real and unedited, except that the recorder's home folder is shown as `~` and raw event logs are left out. `solution/` is hand-written; it is not agent output. One recording is one sample. Agents vary run to run.
 
 ## License
 

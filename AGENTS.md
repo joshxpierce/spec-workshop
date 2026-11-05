@@ -11,3 +11,7 @@ This repo is a teaching kit. `starter/` is a fictional service that coding agent
 - The acceptance suite tests over HTTP only. Never import target code from `acceptance/`.
 - No dependencies. Node 20+ built-ins only.
 - No real customer data. All tenants, people, and domains are fictional.
+
+## Helping a learner
+
+If someone asks how to work through this repo, walk them through `GUIDE.md` one step at a time: run each command for them, say what they should see, and wait for them before the next step. The FAQ in `README.md` covers the common errors.
