@@ -2,6 +2,7 @@
 
 | File | Use it for |
 |---|---|
+| [practice-tickets.md](practice-tickets.md) | Three sandbox tickets with the background already gathered. Pick one if you need a task to spec |
 | [spec-template.md](spec-template.md) | The nine elements plus a run note. Copy it, fill it in, paste it as your agent's first message |
 | [rubric.md](rubric.md) | Seven-row rubric, the three questions, and the spec-defect vs runtime-limit diagnosis |
 | [AGENTS.template.md](AGENTS.template.md) | Standing rules for your own repo. Write them once so every spec can be shorter |

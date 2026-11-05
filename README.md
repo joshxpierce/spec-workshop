@@ -47,20 +47,21 @@ Write the spec in a practice folder, not in this repo, so the agent cannot see `
    ```sh
    mkdir -p ~/spec-workshop-live/weak/specs && cp pack/spec-template.md ~/spec-workshop-live/weak/specs/my-spec.md
    ```
-2. Fill in the nine sections of `~/spec-workshop-live/weak/specs/my-spec.md`. [`prompts/strong.md`](prompts/strong.md) is a finished example.
-3. Start your agent in the practice folder. For Claude Code:
+2. Pick a task. If you do not have one, take a ticket from [`pack/practice-tickets.md`](pack/practice-tickets.md): each one already answers who is affected, what is wrong, and which files to read.
+3. Fill in the nine sections of `~/spec-workshop-live/weak/specs/my-spec.md`. [`prompts/strong.md`](prompts/strong.md) is a finished example.
+4. Start your agent in the practice folder. For Claude Code:
    ```sh
    cd ~/spec-workshop-live/weak && claude --permission-mode plan
    ```
    Codex or Cursor work too: open the same folder.
-4. Send this first message: `Read specs/my-spec.md and carry it out.`
-5. Read the agent's plan before it edits anything (checkpoint one).
-6. Score the result from this folder:
+5. Send this first message: `Read specs/my-spec.md and carry it out.`
+6. Read the agent's plan before it edits anything (checkpoint one).
+7. Score the result from this folder:
    ```sh
    node scripts/verify.mjs ~/spec-workshop-live/weak
    ```
    For an allowlist spec you get the full scorecard. For any other feature, read section 1 (existing tests still pass) and section 3 (files touched), then score it with [`pack/rubric.md`](pack/rubric.md).
-7. Start over with `node scripts/reset-demo.mjs weak`. This deletes the folder, including your spec, so copy the spec somewhere else first.
+8. Start over with `node scripts/reset-demo.mjs weak`. This deletes the folder, including your spec, so copy the spec somewhere else first.
 
 ## Why the live folders are outside this repo
 
