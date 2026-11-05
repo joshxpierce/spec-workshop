@@ -20,7 +20,6 @@ Start with **[pack/](pack/README.md)**: spec template, rubric, and standing-rule
 | `scripts/verify.mjs` | Scores any target folder: its own tests, the acceptance scorecard, and a scope report |
 | `scripts/reset-demo.mjs` | Rebuilds the live folders, and switches to a fallback |
 | `scripts/record-run.mjs` | Records a real headless agent run as fallback evidence |
-| `scripts/export-participant.mjs` | Builds the shareable participant copy (no presenter material, no raw streams, home path shown as `~`), leak-scans it, and verifies it |
 | `fallback/runs/` | Recorded runs from the live session: transcript, diff, scorecard, metadata |
 | `pack/` | Spec template, rubric, `AGENTS.md` and `CLAUDE.md` templates |
 
@@ -36,7 +35,6 @@ node scripts/verify.mjs ~/spec-workshop-live/strong
 node scripts/reset-demo.mjs strong --fallback recorded
 node scripts/reset-demo.mjs strong --fallback solution
 node scripts/record-run.mjs strong                 # re-record a fallback run (about 1 to 2 minutes)
-node scripts/export-participant.mjs                # build ~/spec-workshop-participant for the room
 ```
 
 `reset-demo.mjs` also writes `spec-workshop.code-workspace`, a VS Code workspace with the kit and the three live folders, and one-click tasks for every command above.
