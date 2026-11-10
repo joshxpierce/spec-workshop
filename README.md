@@ -18,6 +18,8 @@ It contains:
 
 Follow **[GUIDE.md](GUIDE.md)**: eight short steps, about 45 minutes, from setup to writing, running, and scoring your own spec. Each step says what you should see.
 
+For a writing-first exercise, start with the [participant pack](pack/README.md). The [developer manual](pack/developer-manual.md) provides the full procedure, test examples, evidence requirements, and troubleshooting.
+
 The quickest way in is to let your coding agent guide you. Clone the repo, open your agent in the folder, and paste:
 
 > Read README.md and GUIDE.md. Walk me through GUIDE.md one step at a time. Run the commands for me, explain what I should see, and wait for me before moving to the next step.
